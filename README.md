@@ -6,4 +6,4 @@ Keys are always strings, values are arbitrary interface{} pointers.
 
 Storage is not thread safe and should be properly guarded in case of shared usage.
 
-Hit() and Store() methods update first and then expire so it is possible to renew a record that should be expired by now, this is done by design.
+Renew() and Store() methods update first and then expire so it is possible to renew a record that should be expired by now, this is done by design.

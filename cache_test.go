@@ -15,7 +15,7 @@ const (
 func TestCache(t *testing.T) {
 	line := CreateLine(time.Millisecond * 250)
 
-	if line.Hit(testRecordName) {
+	if line.Renew(testRecordName) {
 		t.Error("Hit is able to reach non-existing record")
 	}
 
@@ -27,7 +27,7 @@ func TestCache(t *testing.T) {
 		t.Error("Check is unable to find existing record")
 	}
 
-	if !line.Hit(testRecordName) {
+	if !line.Renew(testRecordName) {
 		t.Error("Hit is not able to reach existing record")
 	}
 
@@ -59,7 +59,7 @@ func TestCache(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		time.Sleep(time.Millisecond * 100)
-		if !line.Hit(testAnotherRecord) {
+		if !line.Renew(testAnotherRecord) {
 			t.Errorf("Unable to renew expiration time for the record")
 		}
 	}
@@ -80,7 +80,7 @@ func TestCache(t *testing.T) {
 	line.Store(testRecordName, testRecordValue)
 	for i := 0; i < 5; i++ {
 		time.Sleep(time.Millisecond * 100)
-		if !line.Hit(testRecordName) {
+		if !line.Renew(testRecordName) {
 			t.Errorf("Unable to renew expiration time for the record")
 		}
 	}
