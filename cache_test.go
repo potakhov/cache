@@ -88,4 +88,57 @@ func TestCache(t *testing.T) {
 	if line.Check(testAnotherRecord) {
 		t.Error("Record should've expired by now")
 	}
+
+	deleteLine := CreateLine(time.Second * 60)
+	if deleteLine.Store(1, 0) {
+		t.Errorf("Unable to store a record")
+	}
+	if deleteLine.Store(2, 0) {
+		t.Errorf("Unable to store a record")
+	}
+	if deleteLine.Store(3, 0) {
+		t.Errorf("Unable to store a record")
+	}
+
+	deleteLine.Delete(2)
+
+	if !deleteLine.Check(1) {
+		t.Errorf("Unable to find a record after deletion")
+	}
+	if !deleteLine.Check(3) {
+		t.Errorf("Unable to find a record after deletion")
+	}
+	if deleteLine.Check(2) {
+		t.Errorf("Able to find a record after deletion")
+	}
+
+	deleteLine.Delete(3)
+
+	if !deleteLine.Check(1) {
+		t.Errorf("Unable to find a record after deletion")
+	}
+	if deleteLine.Check(3) {
+		t.Errorf("Able to find a record after deletion")
+	}
+
+	if deleteLine.Store(4, 0) {
+		t.Errorf("Unable to store a record")
+	}
+
+	deleteLine.Delete(1)
+	if deleteLine.Check(1) {
+		t.Errorf("Able to find a record after deletion")
+	}
+	if !deleteLine.Check(4) {
+		t.Errorf("Unable to find a record after deletion")
+	}
+
+	if deleteLine.Delete(1) {
+		t.Errorf("Able to delete a record after deletion")
+	}
+
+	deleteLine.Delete(4)
+	if deleteLine.Check(4) {
+		t.Errorf("Able to find a record after deletion")
+	}
 }

@@ -5,28 +5,13 @@ import (
 	"time"
 )
 
-// ListKeyType defines the list key type
-type ListKeyType string
-
 // ErrCacheRecordNotFound happens when Get() is unable to locate a record.
-var ErrCacheRecordNotFound = errors.New("Record is not found")
-
-type cacheList struct {
-	prev       *cacheList
-	next       *cacheList
-	key        ListKeyType
-	expiration time.Time
-}
-
-type cacheItem struct {
-	value interface{}
-	ptr   *cacheList
-}
+var ErrCacheRecordNotFound = errors.New("record is not found")
 
 // Line is generalized object cache with expiration which generally works with O(1) complexity
 type Line struct {
 	defaultExpirationTime time.Duration
-	store                 map[ListKeyType]*cacheItem
+	store                 map[interface{}]*cacheItem
 	first                 *cacheList
 	last                  *cacheList
 	nextCheckupTime       time.Time
@@ -35,13 +20,100 @@ type Line struct {
 // CreateLine creates a new line with specific default expiration duration for all objects
 func CreateLine(defaultExpirationTime time.Duration) *Line {
 	ret := &Line{defaultExpirationTime: defaultExpirationTime, nextCheckupTime: time.Now().Add(defaultExpirationTime)}
-	ret.store = make(map[ListKeyType]*cacheItem)
+	ret.store = make(map[interface{}]*cacheItem)
 	return ret
 }
 
 // StoreFor records a new hit for <key> (creating the record if it doesn't exist) shifting expiration further in time
 // @returns true if record has been updated, false if new record was created
-func (cl *Line) StoreFor(key ListKeyType, value interface{}, expires time.Duration) bool {
+func (cl *Line) StoreFor(key interface{}, value interface{}, expires time.Duration) bool {
+	return cl.storeKey(key, value, expires)
+}
+
+// Store records a new hit for <key> (creating the record if it doesn't exist) shifting expiration further in time (using default expiration timeout)
+// @returns true if record has been updated, false if new record was created
+func (cl *Line) Store(key interface{}, value interface{}) bool {
+	return cl.storeKey(key, value, cl.defaultExpirationTime)
+}
+
+// RenewFor renews a <key> if it exists shifting expiration further in time without changing the value
+// @returns true if record has been updated false otherwise
+func (cl *Line) RenewFor(key interface{}, expires time.Duration) bool {
+	return cl.renewKey(key, expires)
+}
+
+// Renew renews a <key> if it exists shifting expiration further in time without changing the value (using default expiration timeout)
+// @returns true if record has been updated false otherwise
+func (cl *Line) Renew(key interface{}) bool {
+	return cl.renewKey(key, cl.defaultExpirationTime)
+}
+
+// Check checks if the element is still present in the cache
+func (cl *Line) Check(key interface{}) bool {
+	cl.expire()
+	_, ok := cl.store[key]
+	return ok
+}
+
+// Delete expires the record if it exists
+// @returns true if record has been expired false otherwise
+func (cl *Line) Delete(key interface{}) bool {
+	cl.expire()
+	val, ok := cl.store[key]
+
+	if ok {
+		if val.ptr == cl.first {
+			if val.ptr.next == nil {
+				cl.first = nil
+				cl.last = nil
+			} else {
+				val.ptr.next.prev = nil
+				cl.first = val.ptr.next
+			}
+		} else {
+			if val.ptr == cl.last {
+				val.ptr.prev.next = nil
+				cl.last = val.ptr.prev
+			} else {
+				val.ptr.prev.next = val.ptr.next
+				val.ptr.next.prev = val.ptr.prev
+			}
+		}
+
+		delete(cl.store, key)
+	}
+
+	return ok
+}
+
+// Get retrieves the element from the cache
+func (cl *Line) Get(key interface{}) (interface{}, error) {
+	cl.expire()
+	val, ok := cl.store[key]
+
+	if !ok {
+		return nil, ErrCacheRecordNotFound
+	}
+
+	return val.value, nil
+}
+
+//////////////////////////////////////////////////////////////////////
+// Implementation
+
+type cacheList struct {
+	prev       *cacheList
+	next       *cacheList
+	key        interface{}
+	expiration time.Time
+}
+
+type cacheItem struct {
+	value interface{}
+	ptr   *cacheList
+}
+
+func (cl *Line) storeKey(key interface{}, value interface{}, expires time.Duration) bool {
 	curr, ok := cl.store[key]
 	if !ok {
 		el := &cacheList{key: key, expiration: time.Now().Add(expires)}
@@ -76,15 +148,7 @@ func (cl *Line) StoreFor(key ListKeyType, value interface{}, expires time.Durati
 	return ok
 }
 
-// Store records a new hit for <key> (creating the record if it doesn't exist) shifting expiration further in time (using default expiration timeout)
-// @returns true if record has been updated, false if new record was created
-func (cl *Line) Store(key ListKeyType, value interface{}) bool {
-	return cl.StoreFor(key, value, cl.defaultExpirationTime)
-}
-
-// RenewFor renews a <key> if it exists shifting expiration further in time without changing the value
-// @returns true if record has been updated false otherwise
-func (cl *Line) RenewFor(key ListKeyType, expires time.Duration) bool {
+func (cl *Line) renewKey(key interface{}, expires time.Duration) bool {
 	curr, ok := cl.store[key]
 	if ok {
 		curr.ptr.expiration = time.Now().Add(expires)
@@ -107,33 +171,9 @@ func (cl *Line) RenewFor(key ListKeyType, expires time.Duration) bool {
 	return ok
 }
 
-// Renew renews a <key> if it exists shifting expiration further in time without changing the value (using default expiration timeout)
-// @returns true if record has been updated false otherwise
-func (cl *Line) Renew(key ListKeyType) bool {
-	return cl.RenewFor(key, cl.defaultExpirationTime)
-}
-
-// Check checks if the element is still present in the cache
-func (cl *Line) Check(key ListKeyType) bool {
-	cl.expire()
-	_, ok := cl.store[key]
-	return ok
-}
-
-// Get retrieves the element from the cache
-func (cl *Line) Get(key ListKeyType) (interface{}, error) {
-	cl.expire()
-	val, ok := cl.store[key]
-
-	if !ok {
-		return nil, ErrCacheRecordNotFound
-	}
-
-	return val.value, nil
-}
-
 func (cl *Line) expire() {
 	now := time.Now()
+
 	if now.After(cl.nextCheckupTime) {
 		cl.nextCheckupTime = now.Add(cl.defaultExpirationTime)
 
